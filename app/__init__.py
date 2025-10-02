@@ -142,11 +142,19 @@ def create_task():
     error_msg = None
     result = None
 
-    try:
-        user = User(username=request.json['username'], email=request.json['email'])
-        db.session.add(user)
-        db.session.commit()
+    username = request.json['username']
+    email = request.json['email']
+    user = db.session.query(User).filter(User.username == username, User.email == email).first()
+    if user is None:
+        try:
+            user = User(username=username, email=email)
+            db.session.add(user)
+            db.session.commit()
+        except Exception as e:
+            ok = False
+            error_msg = f"Server error : {e}"
 
+    try:
         task = Task(user_id=user.id, text=request.json["text"])
         db.session.add(task)
         db.session.commit()
@@ -238,6 +246,49 @@ def get_credentails():
     return jsonify(userData=None)
 
 
+@app.route('/api/register', methods=["POST"])
+def register():
+    ok = True
+    error_msg = None
+
+    username = request.json['username']
+    password = request.json['password']
+    email = request.json['email']
+
+    try:
+        token = secrets.token_hex()
+        user = User(
+            username=username, 
+            password=generate_password_hash(password), 
+            email=email,
+            token=token
+        )
+        db.session.add(user)
+        db.session.commit()
+    except Exception as e:
+        ok = False
+        error_msg = f"Server error : {e}"
+
+    if not ok:
+        return jsonify(
+            status='ERR',
+            message=error_msg,
+            data=None
+        )
+
+    return jsonify(
+        status='OK',
+        message='You registered successfully',
+        data={
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_admin": user.is_admin,
+            "token": user.token
+        }
+    )
+
+
 @app.route('/api/login', methods=["POST"])
 def login():
     ok = True
@@ -246,7 +297,8 @@ def login():
     username = request.json['username']
     password = request.json['password']
 
-    user = db.session.query(User).filter(User.username == username, User.is_admin == True).first()
+    user = db.session.query(User).filter(User.username == username, User.password != None).first()
+
     if user is None:
         ok = False
         error_msg = 'Incorrect username'
